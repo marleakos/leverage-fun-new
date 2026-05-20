@@ -9,15 +9,12 @@ describe("Test", () => {
   anchor.setProvider(provider);
 
   const program = anchor.workspace.LeveragedMeme as Program<LeveragedMeme>;
-  
-  // Use the wallet from provider - this is the payer
-  const payer = (provider.wallet as any).payer as Keypair;
-  const creator = provider.wallet.publicKey;
+  const creator = provider.wallet;
 
   it("Initialize Token", async () => {
-    console.log("Creator:", creator.toBase58());
-    
-    const balance = await provider.connection.getBalance(creator);
+    console.log("Creator:", creator.publicKey.toBase58());
+
+    const balance = await provider.connection.getBalance(creator.publicKey);
     console.log("Balance:", balance / LAMPORTS_PER_SOL, "SOL");
 
     if (balance < 0.5 * LAMPORTS_PER_SOL) {
@@ -38,7 +35,7 @@ describe("Test", () => {
     );
 
     const [userReferralPDA] = PublicKey.findProgramAddressSync(
-      [Buffer.from("user_referral"), creator.toBuffer()],
+      [Buffer.from("user_referral"), creator.publicKey.toBuffer()],
       program.programId
     );
 
@@ -52,8 +49,7 @@ describe("Test", () => {
       program.programId
     );
 
-    // Build transaction with both signers
-    const tx = await program.methods
+    await program.methods
       .initializeToken(
         "TestToken",
         "TEST",
@@ -65,7 +61,7 @@ describe("Test", () => {
         null
       )
       .accounts({
-        creator: creator,
+        creator: creator.publicKey,
         tokenMint: tokenMint.publicKey,
         tokenState: tokenStatePDA,
         feeVault: feeVaultPDA,
@@ -77,12 +73,11 @@ describe("Test", () => {
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
       })
-      .signers([payer, tokenMint])
+      .signers([tokenMint])
       .rpc();
 
     console.log("✅ Token initialized!");
-    console.log("Transaction:", tx);
-    
+
     const tokenState = await program.account.tokenState.fetch(tokenStatePDA);
     console.log("Name:", tokenState.name);
     console.log("Symbol:", tokenState.symbol);
