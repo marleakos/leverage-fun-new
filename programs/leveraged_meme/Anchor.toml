@@ -3,10 +3,10 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-leveraged_meme = "9siEsegivtASLpuRHzMC9UEBcCuzeKe8iREadFEZqCAP"
+leveraged_meme = "BYkMeRVSt8mvV2sxhd6eQhH5qp3JszfKimunZ7jDqpZA"
 
 [programs.devnet]
-leveraged_meme = "9siEsegivtASLpuRHzMC9UEBcCuzeKe8iREadFEZqCAP"
+leveraged_meme = "BYkMeRVSt8mvV2sxhd6eQhH5qp3JszfKimunZ7jDqpZA"
 
 [registry]
 url = "https://api.apr.dev"

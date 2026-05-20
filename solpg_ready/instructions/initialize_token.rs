@@ -101,17 +101,12 @@ pub fn handler(
     // Handle referral - if user has existing referrer, use that
     // Otherwise set the provided referrer (only once)
     let user_referral = &mut ctx.accounts.user_referral;
-    
-    // Always ensure user field is set
-    if user_referral.user != creator_key {
-        user_referral.user = creator_key;
-    }
-    
     let final_referrer = if user_referral.referred_by.is_some() {
         user_referral.referred_by
     } else {
         // Set the referrer if provided and not self
         let valid_referrer = referrer.filter(|r| *r != creator_key);
+        user_referral.user = creator_key;
         user_referral.referred_by = valid_referrer;
         user_referral.total_referral_earnings = 0;
         user_referral.total_rewards_claimed = 0;

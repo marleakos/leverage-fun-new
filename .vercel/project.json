@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_xbGb7A4iGNPz0lqisTmdFHx28ZkP",
+  "orgId": "team_8vBR4y46oku2kYyzWxbvhKeu",
+  "projectName": "workspace",
+  "settings": {
+    "createdAt": 1779180411722,
+    "framework": "python",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
