@@ -134,6 +134,11 @@ pub fn handler(
     msg!("Curve state created");
     
     msg!("Setting up CPI for curve token mint");
+    
+    // Get token_mint key before borrowing ctx
+    let token_mint_key = ctx.accounts.token_mint.key();
+    let creator_key = ctx.accounts.creator.key();
+    
     // Mint using creator as authority (mint was initialized with creator as authority)
     let cpi_accounts = token::MintTo {
         mint: ctx.accounts.token_mint.to_account_info(),
@@ -172,7 +177,7 @@ pub fn handler(
     
     let seeds = &[
         TOKEN_STATE_SEED,
-        token_mint.as_ref(),
+        token_mint_key.as_ref(),
         &[ctx.bumps.token_state],
     ];
     let signer = &[&seeds[..]];
@@ -192,7 +197,7 @@ pub fn handler(
     
     let token_state = &mut ctx.accounts.token_state;
     token_state.creator = creator_key;
-    token_state.token_mint = token_mint;
+    token_state.token_mint = token_mint_key;
     token_state.name = name.clone();
     token_state.symbol = symbol.clone();
     token_state.uri = uri;
@@ -206,7 +211,7 @@ pub fn handler(
     token_state.oracle_price_at_launch = oracle_price_at_launch;
     
     let fee_vault = &mut ctx.accounts.fee_vault;
-    fee_vault.token_mint = token_mint;
+    fee_vault.token_mint = token_mint_key;
     fee_vault.total_collected = 0;
     fee_vault.creator_claimed = 0;
     fee_vault.protocol_claimed = 0;
@@ -217,7 +222,7 @@ pub fn handler(
     
     // Emit initialization event
     emit!(TokenInitialized {
-        token_mint,
+        token_mint: token_mint_key,
         creator: creator_key,
         name: name.clone(),
         symbol: symbol.clone(),
