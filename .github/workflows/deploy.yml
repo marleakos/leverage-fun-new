@@ -1,64 +1,109 @@
-name: Build and Deploy
+name: Build and Deploy Solana Program
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 env:
-  SOLANA_CLI_VERSION: 1.17.0
+  SOLANA_CLI_VERSION: 1.18.26
   ANCHOR_VERSION: 0.28.0
-  PROGRAM_ID: 9siEsegivtASLpuRHzMC9UEBcCuzeKe8iREadFEZqCAP
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  deploy:
-    runs-on: ubuntu-22.04
+  build-and-deploy:
+    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install Rust
-      run: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75.0
-        source $HOME/.cargo/env
-        rustup component add rustfmt
-        rustc --version
-        cargo --version
-    
-    - name: Install Solana CLI
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libssl-dev libudev-dev pkg-config
-        wget -q --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 0 https://github.com/solana-labs/solana/releases/download/v${SOLANA_CLI_VERSION}/solana-release-x86_64-unknown-linux-gnu.tar.bz2
-        tar -xjf solana-release-x86_64-unknown-linux-gnu.tar.bz2
-        mkdir -p $HOME/.local/share/solana
-        mv solana-release/bin/* $HOME/.local/share/solana/
-        export PATH="$HOME/.local/share/solana:$PATH"
-        solana --version
-    
-    - name: Setup Solana Keypair
-      run: |
-        mkdir -p ~/.config/solana
-        echo '${{ secrets.SOLANA_KEYPAIR }}' > ~/.config/solana/id.json
-        export PATH="$HOME/.local/share/solana:$PATH"
-        solana config set --keypair ~/.config/solana/id.json
-        solana config set --url devnet
-        solana address
-    
-    - name: Install Anchor
-      run: |
-        source $HOME/.cargo/env
-        cargo install --git https://github.com/coral-xyz/anchor --tag v${ANCHOR_VERSION} anchor-cli --locked
-        $HOME/.cargo/bin/anchor --version
-    
-    - name: Build
-      run: |
-        source $HOME/.cargo/env
-        export PATH="$HOME/.local/share/solana:$PATH"
-        cd programs/leveraged_meme
-        cargo build-sbf
-    
-    - name: Deploy
-      run: |
-        export PATH="$HOME/.local/share/solana:$PATH"
-        solana program deploy target/deploy/leveraged_meme.so --program-id ${{ env.PROGRAM_ID }}
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Solana CLI
+        uses: actions/cache@v4
+        id: cache-solana
+        with:
+          path: |
+            ~/.cache/solana
+            ~/.local/share/solana
+          key: solana-${{ env.SOLANA_CLI_VERSION }}
+
+      - name: Install Solana CLI
+        if: steps.cache-solana.outputs.cache-hit != 'true'
+        run: |
+          sh -c "$(curl -sSfL https://release.solana.com/v${SOLANA_CLI_VERSION}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Add Solana to PATH
+        run: |
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Setup Solana Config
+        run: |
+          mkdir -p ~/.config/solana
+          echo '${{ secrets.WALLET_PRIVATE_KEY }}' > ~/.config/solana/id.json
+          solana config set --url devnet
+          solana address
+
+      - name: Check Balance
+        run: solana balance
+
+      - name: Install Anchor
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor --tag v${ANCHOR_VERSION} anchor-cli --locked
+
+      - name: Build Program
+        run: |
+          cd program
+          anchor build
+
+      - name: Deploy Program
+        id: deploy
+        run: |
+          cd program
+          DEPLOY_OUTPUT=$(anchor deploy --provider.cluster devnet 2>&1)
+          echo "$DEPLOY_OUTPUT"
+          PROGRAM_ID=$(echo "$DEPLOY_OUTPUT" | grep -oP 'Program Id: \K[\w]+')
+          echo "program_id=$PROGRAM_ID" >> $GITHUB_OUTPUT
+
+      - name: Update Program ID in files
+        run: |
+          PROGRAM_ID="${{ steps.deploy.outputs.program_id }}"
+          echo "New Program ID: $PROGRAM_ID"
+          
+          # Update Anchor.toml
+          sed -i "s/leveraged_meme = \"[^\"]*\"/leveraged_meme = \"$PROGRAM_ID\"/" Anchor.toml
+          
+          # Update lib.rs
+          sed -i "s/declare_id!(\"[^\"]*\")/declare_id!(\"$PROGRAM_ID\")/" program/src/lib.rs
+
+      - name: Commit and Push Changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git diff --quiet && git diff --staged --quiet || git commit -m "deploy: update Program ID to ${{ steps.deploy.outputs.program_id }}"
+          git push
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: program-build
+          path: |
+            program/target/deploy/*.so
+            program/target/idl/*.json
+            program/target/types/*.ts
+
+      - name: Output Program ID
+        run: |
+          echo "========================================"
+          echo "✅ DEPLOYMENT SUCCESSFUL!"
+          echo "========================================"
+          echo "Program ID: ${{ steps.deploy.outputs.program_id }}"
+          echo "========================================"
