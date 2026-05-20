@@ -16,7 +16,7 @@ pub struct InitializeToken<'info> {
         init,
         payer = creator,
         mint::decimals = TOKEN_DECIMALS,
-        mint::authority = token_state,
+        mint::authority = creator,
     )]
     pub token_mint: Account<'info, Mint>,
 
@@ -134,24 +134,16 @@ pub fn handler(
     msg!("Curve state created");
     
     msg!("Setting up CPI for curve token mint");
+    // Mint using creator as authority (mint was initialized with creator as authority)
     let cpi_accounts = token::MintTo {
         mint: ctx.accounts.token_mint.to_account_info(),
         to: ctx.accounts.curve_token_account.to_account_info(),
-        authority: ctx.accounts.token_state.to_account_info(),
+        authority: ctx.accounts.creator.to_account_info(),
     };
     
-    let seeds = &[
-        TOKEN_STATE_SEED,
-        token_mint.as_ref(),
-        &[ctx.bumps.token_state],
-    ];
-    
-    let signer = &[&seeds[..]];
-    
-    let cpi_ctx = CpiContext::new_with_signer(
+    let cpi_ctx = CpiContext::new(
         ctx.accounts.token_program.to_account_info(),
         cpi_accounts,
-        signer,
     );
     
     msg!("Minting curve tokens");
@@ -161,16 +153,42 @@ pub fn handler(
     let cpi_accounts_lp = token::MintTo {
         mint: ctx.accounts.token_mint.to_account_info(),
         to: ctx.accounts.lp_token_account.to_account_info(),
-        authority: ctx.accounts.token_state.to_account_info(),
+        authority: ctx.accounts.creator.to_account_info(),
     };
     
-    let cpi_ctx_lp = CpiContext::new_with_signer(
+    let cpi_ctx_lp = CpiContext::new(
         ctx.accounts.token_program.to_account_info(),
         cpi_accounts_lp,
-        signer,
     );
     
     token::mint_to(cpi_ctx_lp, LP_RESERVE_AMOUNT)?;
+    
+    // Transfer mint authority to token_state PDA
+    msg!("Transferring mint authority to token_state");
+    let cpi_set_authority = token::SetAuthority {
+        current_authority: ctx.accounts.creator.to_account_info(),
+        account_or_mint: ctx.accounts.token_mint.to_account_info(),
+    };
+    
+    let seeds = &[
+        TOKEN_STATE_SEED,
+        token_mint.as_ref(),
+        &[ctx.bumps.token_state],
+    ];
+    let signer = &[&seeds[..]];
+    
+    let cpi_ctx_authority = CpiContext::new_with_signer(
+        ctx.accounts.token_program.to_account_info(),
+        cpi_set_authority,
+        signer,
+    );
+    
+    token::set_authority(
+        cpi_ctx_authority,
+        token::spl_token::instruction::AuthorityType::MintTokens,
+        Some(ctx.accounts.token_state.key()),
+    )?;
+    msg!("Mint authority transferred");
     
     let token_state = &mut ctx.accounts.token_state;
     token_state.creator = creator_key;
