@@ -10,12 +10,15 @@ describe("Test", () => {
   anchor.setProvider(provider);
 
   const program = anchor.workspace.LeveragedMeme as Program<LeveragedMeme>;
-  const creator = provider.wallet;
+  
+  // Get wallet from provider
+  const wallet = provider.wallet;
+  const creator = wallet.publicKey;
 
   it("Initialize Token", async () => {
-    console.log("Creator:", creator.publicKey.toBase58());
+    console.log("Creator:", creator.toBase58());
     
-    const balance = await provider.connection.getBalance(creator.publicKey);
+    const balance = await provider.connection.getBalance(creator);
     console.log("Balance:", balance / LAMPORTS_PER_SOL, "SOL");
 
     if (balance < 0.5 * LAMPORTS_PER_SOL) {
@@ -36,7 +39,7 @@ describe("Test", () => {
     );
 
     const [userReferralPDA] = PublicKey.findProgramAddressSync(
-      [Buffer.from("user_referral"), creator.publicKey.toBuffer()],
+      [Buffer.from("user_referral"), creator.toBuffer()],
       program.programId
     );
 
@@ -50,7 +53,8 @@ describe("Test", () => {
       program.programId
     );
 
-    await program.methods
+    // Build transaction
+    const tx = await program.methods
       .initializeToken(
         "TestToken",
         "TEST",
@@ -62,7 +66,7 @@ describe("Test", () => {
         null
       )
       .accounts({
-        creator: creator.publicKey,
+        creator: creator,
         tokenMint: tokenMint.publicKey,
         tokenState: tokenStatePDA,
         feeVault: feeVaultPDA,
@@ -78,6 +82,7 @@ describe("Test", () => {
       .rpc();
 
     console.log("✅ Token initialized!");
+    console.log("Transaction:", tx);
     
     const tokenState = await program.account.tokenState.fetch(tokenStatePDA);
     console.log("Name:", tokenState.name);
