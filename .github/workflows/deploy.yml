@@ -21,6 +21,7 @@ jobs:
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75.0
         source $HOME/.cargo/env
+        rustup component add rustfmt
         rustc --version
         cargo --version
     
@@ -53,6 +54,7 @@ jobs:
     - name: Build
       run: |
         source $HOME/.cargo/env
+        export PATH="$HOME/.local/share/solana:$PATH"
         $HOME/.cargo/bin/anchor build
     
     - name: Deploy
