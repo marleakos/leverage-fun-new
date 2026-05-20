@@ -10,8 +10,8 @@ anchor.setProvider(provider);
 
 const program = anchor.workspace.LeveragedMeme as Program<LeveragedMeme>;
 
-// Test accounts
-const creator = Keypair.generate();
+// Use the wallet from provider (already has SOL)
+const creator = provider.wallet;
 
 // Token mint
 const tokenMint = Keypair.generate();
@@ -44,44 +44,52 @@ const [lpTokenAccountPDA] = PublicKey.findProgramAddressSync(
 
 // Run test
 console.log("Testing initialize_token...");
+console.log("Creator:", creator.publicKey.toBase58());
 
-try {
-  await provider.connection.requestAirdrop(creator.publicKey, 10 * LAMPORTS_PER_SOL);
-  await new Promise(resolve => setTimeout(resolve, 1000));
+// Check balance
+const balance = await provider.connection.getBalance(creator.publicKey);
+console.log("Balance:", balance / LAMPORTS_PER_SOL, "SOL");
 
-  await program.methods
-    .initializeToken(
-      "TestToken",
-      "TEST", 
-      "https://example.com/token.json",
-      5,
-      { long: {} },
-      { solPerp: {} },
-      new anchor.BN(100000000),
-      null
-    )
-    .accounts({
-      creator: creator.publicKey,
-      tokenMint: tokenMint.publicKey,
-      tokenState: tokenStatePDA,
-      feeVault: feeVaultPDA,
-      userReferral: userReferralPDA,
-      curveTokenAccount: curveTokenAccountPDA,
-      lpTokenAccount: lpTokenAccountPDA,
-      systemProgram: SystemProgram.programId,
-      tokenProgram: TOKEN_PROGRAM_ID,
-      rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-      clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-    })
-    .signers([creator, tokenMint])
-    .rpc();
+if (balance < LAMPORTS_PER_SOL) {
+  console.error("❌ Not enough SOL. Need at least 1 SOL.");
+  console.error("Get devnet SOL from: https://faucet.solana.com");
+} else {
+  try {
+    await program.methods
+      .initializeToken(
+        "TestToken",
+        "TEST", 
+        "https://example.com/token.json",
+        5,
+        { long: {} },
+        { solPerp: {} },
+        new anchor.BN(100000000),
+        null
+      )
+      .accounts({
+        creator: creator.publicKey,
+        tokenMint: tokenMint.publicKey,
+        tokenState: tokenStatePDA,
+        feeVault: feeVaultPDA,
+        userReferral: userReferralPDA,
+        curveTokenAccount: curveTokenAccountPDA,
+        lpTokenAccount: lpTokenAccountPDA,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+      })
+      .signers([tokenMint])
+      .rpc();
 
-  console.log("✅ SUCCESS: Token initialized!");
-  
-  const tokenState = await program.account.tokenState.fetch(tokenStatePDA);
-  console.log("Name:", tokenState.name);
-  console.log("Symbol:", tokenState.symbol);
-  
-} catch (error) {
-  console.error("❌ FAILED:", error);
+    console.log("✅ SUCCESS: Token initialized!");
+    
+    const tokenState = await program.account.tokenState.fetch(tokenStatePDA);
+    console.log("Name:", tokenState.name);
+    console.log("Symbol:", tokenState.symbol);
+    console.log("Leverage:", tokenState.leverage);
+    
+  } catch (error) {
+    console.error("❌ FAILED:", error);
+  }
 }
