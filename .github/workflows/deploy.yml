@@ -17,27 +17,27 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        submodules: recursive
-    
+        submodules: false
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-    
+
     - name: Install Rust
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75.0
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
         source $HOME/.cargo/env
         rustc --version
-    
+
     - name: Install Solana CLI
       run: |
         sh -c "$(curl -sSfL https://release.solana.com/v${SOLANA_CLI_VERSION}/install)"
         echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
         export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
         solana --version
-    
+
     - name: Setup Solana Keypair
       run: |
         mkdir -p ~/.config/solana
@@ -46,26 +46,26 @@ jobs:
         solana config set --keypair ~/.config/solana/id.json
         solana config set --url devnet
         solana address
-    
+
     - name: Install Anchor
       run: |
         export PATH="$HOME/.cargo/bin:$PATH"
         cargo install --git https://github.com/coral-xyz/anchor --tag v${ANCHOR_VERSION} anchor-cli --locked
         export PATH="$HOME/.cargo/bin:$PATH"
         anchor --version
-    
+
     - name: Build Program
       run: |
         export PATH="$HOME/.cargo/bin:$PATH:$HOME/.local/share/solana/install/active_release/bin"
         cd programs/leveraged_meme
         anchor build
-    
+
     - name: Deploy to Devnet
       run: |
         export PATH="$HOME/.cargo/bin:$PATH:$HOME/.local/share/solana/install/active_release/bin"
         cd programs/leveraged_meme
         solana program deploy target/deploy/leveraged_meme.so --program-id ${{ env.PROGRAM_ID }}
-    
+
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
       with:
