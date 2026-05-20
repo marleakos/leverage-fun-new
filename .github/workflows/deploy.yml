@@ -20,23 +20,25 @@ jobs:
     - name: Install Rust
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75.0
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
         source $HOME/.cargo/env
         rustc --version
+        cargo --version
     
     - name: Install Solana CLI
       run: |
-        sh -c "$(curl -sSfL https://release.solana.com/v${SOLANA_CLI_VERSION}/install)"
-        echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
-        $HOME/.local/share/solana/install/active_release/bin/solana --version
+        curl -sSfL https://release.solana.com/v${SOLANA_CLI_VERSION}/install | sh
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        solana --version
+        which solana
     
     - name: Setup Solana Keypair
       run: |
         mkdir -p ~/.config/solana
         echo '${{ secrets.SOLANA_KEYPAIR }}' > ~/.config/solana/id.json
-        $HOME/.local/share/solana/install/active_release/bin/solana config set --keypair ~/.config/solana/id.json
-        $HOME/.local/share/solana/install/active_release/bin/solana config set --url devnet
-        $HOME/.local/share/solana/install/active_release/bin/solana address
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        solana config set --keypair ~/.config/solana/id.json
+        solana config set --url devnet
+        solana address
     
     - name: Install Anchor
       run: |
@@ -51,4 +53,5 @@ jobs:
     
     - name: Deploy
       run: |
-        $HOME/.local/share/solana/install/active_release/bin/solana program deploy target/deploy/leveraged_meme.so --program-id ${{ env.PROGRAM_ID }}
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        solana program deploy target/deploy/leveraged_meme.so --program-id ${{ env.PROGRAM_ID }}
