@@ -51,11 +51,11 @@ jobs:
         cargo install --git https://github.com/coral-xyz/anchor --tag v${ANCHOR_VERSION} anchor-cli --locked
         $HOME/.cargo/bin/anchor --version
     
-    - name: Build
+    - name: Build with locked dependencies
       run: |
         source $HOME/.cargo/env
         export PATH="$HOME/.local/share/solana:$PATH"
-        $HOME/.cargo/bin/anchor build
+        cargo build-sbf --manifest-path=programs/leveraged_meme/Cargo.toml --locked
     
     - name: Deploy
       run: |
