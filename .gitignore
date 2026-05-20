@@ -1,16 +1,41 @@
-# v0 sandbox internal files
-__v0_runtime_loader.js
-__v0_devtools.tsx
-__v0_jsx-dev-runtime.ts
-.snowflake/
-.v0-trash/
-.vercel/
+# OpenClaw
+.openclaw/
+AGENTS.md
+SOUL.md
+USER.md
+TOOLS.md
+HEARTBEAT.md
+IDENTITY.md
+memory/
 
-# Environment variables
-.env*.local
+# Claude
+.claude/
 
-# Common ignores
-node_modules
-.next/
+# Frontend (separate repo)
+frontend-code/
+
+# Build artifacts
+programs/anchor_project/
+programs/anchor_project.zip
+programs/solana_playground/
+programs/solana_playground.zip
+programs/solpg_final/
+programs/solpg_final.zip
+programs/solpg_upload/
+programs/solpg_upload.zip
+programs/leveraged_meme_native/
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
-.vercel
+Thumbs.db
