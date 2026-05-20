@@ -26,16 +26,19 @@ jobs:
     
     - name: Install Solana CLI
       run: |
-        curl -sSfL https://release.solana.com/v${SOLANA_CLI_VERSION}/install | sh
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        sudo apt-get update
+        sudo apt-get install -y libssl-dev libudev-dev pkg-config
+        wget -q --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 0 https://github.com/solana-labs/solana/releases/download/v${SOLANA_CLI_VERSION}/solana-release-x86_64-unknown-linux-gnu.tar.bz2
+        tar -xjf solana-release-x86_64-unknown-linux-gnu.tar.bz2
+        mv solana-release/bin/solana $HOME/.local/share/solana/
+        export PATH="$HOME/.local/share/solana:$PATH"
         solana --version
-        which solana
     
     - name: Setup Solana Keypair
       run: |
         mkdir -p ~/.config/solana
         echo '${{ secrets.SOLANA_KEYPAIR }}' > ~/.config/solana/id.json
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        export PATH="$HOME/.local/share/solana:$PATH"
         solana config set --keypair ~/.config/solana/id.json
         solana config set --url devnet
         solana address
@@ -53,5 +56,5 @@ jobs:
     
     - name: Deploy
       run: |
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        export PATH="$HOME/.local/share/solana:$PATH"
         solana program deploy target/deploy/leveraged_meme.so --program-id ${{ env.PROGRAM_ID }}
