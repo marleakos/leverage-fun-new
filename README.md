@@ -33,3 +33,4 @@ anchor deploy
 - `graduate`: Graduate token to AMM when threshold reached
 - `claim_fees`: Claim creator fees
 - `claim_referral_rewards`: Claim referral rewards
+# Leveraged Meme Program
