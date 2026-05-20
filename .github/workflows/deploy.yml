@@ -9,6 +9,7 @@ env:
   SOLANA_CLI_VERSION: 1.17.0
   ANCHOR_VERSION: 0.28.0
   PROGRAM_ID: 9siEsegivtASLpuRHzMC9UEBcCuzeKe8iREadFEZqCAP
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   deploy:
@@ -20,31 +21,34 @@ jobs:
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75.0
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        source $HOME/.cargo/env
+        rustc --version
     
     - name: Install Solana CLI
       run: |
         sh -c "$(curl -sSfL https://release.solana.com/v${SOLANA_CLI_VERSION}/install)"
         echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+        $HOME/.local/share/solana/install/active_release/bin/solana --version
     
     - name: Setup Solana Keypair
       run: |
         mkdir -p ~/.config/solana
         echo '${{ secrets.SOLANA_KEYPAIR }}' > ~/.config/solana/id.json
-        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-        solana config set --keypair ~/.config/solana/id.json
-        solana config set --url devnet
+        $HOME/.local/share/solana/install/active_release/bin/solana config set --keypair ~/.config/solana/id.json
+        $HOME/.local/share/solana/install/active_release/bin/solana config set --url devnet
+        $HOME/.local/share/solana/install/active_release/bin/solana address
     
     - name: Install Anchor
       run: |
-        export PATH="$HOME/.cargo/bin:$PATH"
+        source $HOME/.cargo/env
         cargo install --git https://github.com/coral-xyz/anchor --tag v${ANCHOR_VERSION} anchor-cli --locked
+        $HOME/.cargo/bin/anchor --version
     
     - name: Build
       run: |
-        export PATH="$HOME/.cargo/bin:$PATH:$HOME/.local/share/solana/install/active_release/bin"
-        anchor build
+        source $HOME/.cargo/env
+        $HOME/.cargo/bin/anchor build
     
     - name: Deploy
       run: |
-        export PATH="$HOME/.cargo/bin:$PATH:$HOME/.local/share/solana/install/active_release/bin"
-        solana program deploy target/deploy/leveraged_meme.so --program-id ${{ env.PROGRAM_ID }}
+        $HOME/.local/share/solana/install/active_release/bin/solana program deploy target/deploy/leveraged_meme.so --program-id ${{ env.PROGRAM_ID }}
