@@ -1,0 +1,50 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  SOLANA_CLI_VERSION: 1.17.0
+  ANCHOR_VERSION: 0.28.0
+  PROGRAM_ID: 9siEsegivtASLpuRHzMC9UEBcCuzeKe8iREadFEZqCAP
+
+jobs:
+  deploy:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.75.0
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    
+    - name: Install Solana CLI
+      run: |
+        sh -c "$(curl -sSfL https://release.solana.com/v${SOLANA_CLI_VERSION}/install)"
+        echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+    
+    - name: Setup Solana Keypair
+      run: |
+        mkdir -p ~/.config/solana
+        echo '${{ secrets.SOLANA_KEYPAIR }}' > ~/.config/solana/id.json
+        export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+        solana config set --keypair ~/.config/solana/id.json
+        solana config set --url devnet
+    
+    - name: Install Anchor
+      run: |
+        export PATH="$HOME/.cargo/bin:$PATH"
+        cargo install --git https://github.com/coral-xyz/anchor --tag v${ANCHOR_VERSION} anchor-cli --locked
+    
+    - name: Build
+      run: |
+        export PATH="$HOME/.cargo/bin:$PATH:$HOME/.local/share/solana/install/active_release/bin"
+        anchor build
+    
+    - name: Deploy
+      run: |
+        export PATH="$HOME/.cargo/bin:$PATH:$HOME/.local/share/solana/install/active_release/bin"
+        solana program deploy target/deploy/leveraged_meme.so --program-id ${{ env.PROGRAM_ID }}
