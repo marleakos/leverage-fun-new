@@ -14,14 +14,12 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-action@stable
       with:
         toolchain: 1.75.0
-        override: true
-        components: rustfmt, clippy
     
     - name: Install Solana CLI
       run: |
@@ -40,7 +38,7 @@ jobs:
         cargo install --git https://github.com/coral-xyz/anchor --tag v${ANCHOR_VERSION} anchor-cli --locked
     
     - name: Cache Cargo Dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry
@@ -64,7 +62,7 @@ jobs:
         solana program deploy target/deploy/leveraged_meme.so --program-id ${{ env.PROGRAM_ID }}
     
     - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: program-build
         path: |
