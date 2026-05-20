@@ -90,6 +90,7 @@ pub fn handler(
     oracle_price_at_launch: u64,
     referrer: Option<Pubkey>,
 ) -> Result<()> {
+    msg!("Starting initialize_token handler");
     require!(name.len() <= 32, LeveragedMemeError::NameTooLong);
     require!(symbol.len() <= 10, LeveragedMemeError::SymbolTooLong);
     require!(leverage >= 2 && leverage <= 10, LeveragedMemeError::InvalidLeverage);
@@ -97,6 +98,8 @@ pub fn handler(
     let clock = &ctx.accounts.clock;
     let token_mint = ctx.accounts.token_mint.key();
     let creator_key = ctx.accounts.creator.key();
+    msg!("Creator: {}", creator_key);
+    msg!("Token mint: {}", token_mint);
     
     // Handle referral - if user has existing referrer, use that
     // Otherwise set the provided referrer (only once)
@@ -118,6 +121,7 @@ pub fn handler(
         valid_referrer
     };
     
+    msg!("Setting up curve state");
     let curve_state = CurveState {
         virtual_sol_reserve: VIRTUAL_SOL_SEED,
         virtual_token_reserve: CURVE_RESERVE_AMOUNT,
@@ -127,7 +131,9 @@ pub fn handler(
             .checked_mul(CURVE_RESERVE_AMOUNT as u128)
             .ok_or(LeveragedMemeError::MathOverflow)?,
     };
+    msg!("Curve state created");
     
+    msg!("Setting up CPI for curve token mint");
     let cpi_accounts = token::MintTo {
         mint: ctx.accounts.token_mint.to_account_info(),
         to: ctx.accounts.curve_token_account.to_account_info(),
@@ -148,7 +154,9 @@ pub fn handler(
         signer,
     );
     
+    msg!("Minting curve tokens");
     token::mint_to(cpi_ctx, CURVE_RESERVE_AMOUNT)?;
+    msg!("Curve tokens minted");
     
     let cpi_accounts_lp = token::MintTo {
         mint: ctx.accounts.token_mint.to_account_info(),
