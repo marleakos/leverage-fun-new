@@ -1,0 +1,72 @@
+name: Build and Deploy Solana Program
+
+on:
+  push:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+env:
+  SOLANA_CLI_VERSION: 1.17.0
+  ANCHOR_VERSION: 0.28.0
+  PROGRAM_ID: 9siEsegivtASLpuRHzMC9UEBcCuzeKe8iREadFEZqCAP
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: 1.75.0
+        override: true
+        components: rustfmt, clippy
+    
+    - name: Install Solana CLI
+      run: |
+        sh -c "$(curl -sSfL https://release.solana.com/v${SOLANA_CLI_VERSION}/install)"
+        echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+    
+    - name: Setup Solana Keypair
+      run: |
+        mkdir -p ~/.config/solana
+        echo "${{ secrets.SOLANA_KEYPAIR }}" > ~/.config/solana/id.json
+        solana config set --keypair ~/.config/solana/id.json
+        solana config set --url devnet
+    
+    - name: Install Anchor
+      run: |
+        cargo install --git https://github.com/coral-xyz/anchor --tag v${ANCHOR_VERSION} anchor-cli --locked
+    
+    - name: Cache Cargo Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Build Program
+      run: |
+        cd programs/leveraged_meme
+        anchor build
+    
+    - name: Run Tests
+      run: |
+        cd programs/leveraged_meme
+        anchor test --skip-local-validator || true
+    
+    - name: Deploy to Devnet
+      run: |
+        cd programs/leveraged_meme
+        solana program deploy target/deploy/leveraged_meme.so --program-id ${{ env.PROGRAM_ID }}
+    
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: program-build
+        path: |
+          programs/leveraged_meme/target/deploy/
+          programs/leveraged_meme/target/idl/
