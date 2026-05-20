@@ -5,15 +5,14 @@ import { PublicKey, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 describe("Test", () => {
-  // Configure the client
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
   const program = anchor.workspace.LeveragedMeme as Program<LeveragedMeme>;
   
-  // Get wallet from provider
-  const wallet = provider.wallet;
-  const creator = wallet.publicKey;
+  // Use the wallet from provider - this is the payer
+  const payer = (provider.wallet as any).payer as Keypair;
+  const creator = provider.wallet.publicKey;
 
   it("Initialize Token", async () => {
     console.log("Creator:", creator.toBase58());
@@ -53,7 +52,7 @@ describe("Test", () => {
       program.programId
     );
 
-    // Build transaction
+    // Build transaction with both signers
     const tx = await program.methods
       .initializeToken(
         "TestToken",
@@ -78,7 +77,7 @@ describe("Test", () => {
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
       })
-      .signers([tokenMint])
+      .signers([payer, tokenMint])
       .rpc();
 
     console.log("✅ Token initialized!");
