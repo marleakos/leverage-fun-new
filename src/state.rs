@@ -27,7 +27,6 @@ pub struct TokenState {
     pub graduated: bool,
     pub amm_pool: Option<Pubkey>,
     pub created_at: i64,
-    pub paused: bool,
     pub total_fees_collected: u64,
     // Leverage fields
     pub leverage: u8,
@@ -48,7 +47,6 @@ impl TokenState {
         1 + // graduated
         1 + 32 + // amm_pool
         8 + // created_at
-        1 + // paused
         8 + // total_fees_collected
         1 + // leverage
         1 + // direction

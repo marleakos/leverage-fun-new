@@ -16,7 +16,7 @@ pub struct InitializeToken<'info> {
         init,
         payer = creator,
         mint::decimals = TOKEN_DECIMALS,
-        mint::authority = token_state,
+        mint::authority = creator,
     )]
     pub token_mint: Account<'info, Mint>,
 
@@ -90,6 +90,7 @@ pub fn handler(
     oracle_price_at_launch: u64,
     referrer: Option<Pubkey>,
 ) -> Result<()> {
+    msg!("Starting initialize_token handler");
     require!(name.len() <= 32, LeveragedMemeError::NameTooLong);
     require!(symbol.len() <= 10, LeveragedMemeError::SymbolTooLong);
     require!(leverage >= 2 && leverage <= 10, LeveragedMemeError::InvalidLeverage);
@@ -97,22 +98,30 @@ pub fn handler(
     let clock = &ctx.accounts.clock;
     let token_mint = ctx.accounts.token_mint.key();
     let creator_key = ctx.accounts.creator.key();
+    msg!("Creator: {}", creator_key);
+    msg!("Token mint: {}", token_mint);
     
     // Handle referral - if user has existing referrer, use that
     // Otherwise set the provided referrer (only once)
     let user_referral = &mut ctx.accounts.user_referral;
+    
+    // Always ensure user field is set
+    if user_referral.user != creator_key {
+        user_referral.user = creator_key;
+    }
+    
     let final_referrer = if user_referral.referred_by.is_some() {
         user_referral.referred_by
     } else {
         // Set the referrer if provided and not self
         let valid_referrer = referrer.filter(|r| *r != creator_key);
-        user_referral.user = creator_key;
         user_referral.referred_by = valid_referrer;
         user_referral.total_referral_earnings = 0;
         user_referral.total_rewards_claimed = 0;
         valid_referrer
     };
     
+    msg!("Setting up curve state");
     let curve_state = CurveState {
         virtual_sol_reserve: VIRTUAL_SOL_SEED,
         virtual_token_reserve: CURVE_RESERVE_AMOUNT,
@@ -122,11 +131,43 @@ pub fn handler(
             .checked_mul(CURVE_RESERVE_AMOUNT as u128)
             .ok_or(LeveragedMemeError::MathOverflow)?,
     };
+    msg!("Curve state created");
     
+    msg!("Setting up CPI for curve token mint");
+    // Mint using creator as authority (mint was initialized with creator as authority)
     let cpi_accounts = token::MintTo {
         mint: ctx.accounts.token_mint.to_account_info(),
         to: ctx.accounts.curve_token_account.to_account_info(),
-        authority: ctx.accounts.token_state.to_account_info(),
+        authority: ctx.accounts.creator.to_account_info(),
+    };
+    
+    let cpi_ctx = CpiContext::new(
+        ctx.accounts.token_program.to_account_info(),
+        cpi_accounts,
+    );
+    
+    msg!("Minting curve tokens");
+    token::mint_to(cpi_ctx, CURVE_RESERVE_AMOUNT)?;
+    msg!("Curve tokens minted");
+    
+    let cpi_accounts_lp = token::MintTo {
+        mint: ctx.accounts.token_mint.to_account_info(),
+        to: ctx.accounts.lp_token_account.to_account_info(),
+        authority: ctx.accounts.creator.to_account_info(),
+    };
+    
+    let cpi_ctx_lp = CpiContext::new(
+        ctx.accounts.token_program.to_account_info(),
+        cpi_accounts_lp,
+    );
+    
+    token::mint_to(cpi_ctx_lp, LP_RESERVE_AMOUNT)?;
+    
+    // Transfer mint authority to token_state PDA
+    msg!("Transferring mint authority to token_state");
+    let cpi_set_authority = token::SetAuthority {
+        current_authority: ctx.accounts.creator.to_account_info(),
+        account_or_mint: ctx.accounts.token_mint.to_account_info(),
     };
     
     let seeds = &[
@@ -134,30 +175,20 @@ pub fn handler(
         token_mint.as_ref(),
         &[ctx.bumps.token_state],
     ];
-    
     let signer = &[&seeds[..]];
     
-    let cpi_ctx = CpiContext::new_with_signer(
+    let cpi_ctx_authority = CpiContext::new_with_signer(
         ctx.accounts.token_program.to_account_info(),
-        cpi_accounts,
+        cpi_set_authority,
         signer,
     );
     
-    token::mint_to(cpi_ctx, CURVE_RESERVE_AMOUNT)?;
-    
-    let cpi_accounts_lp = token::MintTo {
-        mint: ctx.accounts.token_mint.to_account_info(),
-        to: ctx.accounts.lp_token_account.to_account_info(),
-        authority: ctx.accounts.token_state.to_account_info(),
-    };
-    
-    let cpi_ctx_lp = CpiContext::new_with_signer(
-        ctx.accounts.token_program.to_account_info(),
-        cpi_accounts_lp,
-        signer,
-    );
-    
-    token::mint_to(cpi_ctx_lp, LP_RESERVE_AMOUNT)?;
+    token::set_authority(
+        cpi_ctx_authority,
+        token::spl_token::instruction::AuthorityType::MintTokens,
+        Some(ctx.accounts.token_state.key()),
+    )?;
+    msg!("Mint authority transferred");
     
     let token_state = &mut ctx.accounts.token_state;
     token_state.creator = creator_key;
@@ -168,7 +199,6 @@ pub fn handler(
     token_state.curve_state = curve_state;
     token_state.graduated = false;
     token_state.created_at = clock.unix_timestamp;
-    token_state.paused = false;
     token_state.total_fees_collected = 0;
     token_state.leverage = leverage;
     token_state.direction = direction;

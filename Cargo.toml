@@ -1,7 +1,7 @@
 [package]
 name = "leveraged_meme"
 version = "0.1.0"
-description = "Leveraged Meme Trading Program"
+description = "Created with Anchor"
 edition = "2021"
 
 [lib]
@@ -18,6 +18,11 @@ default = []
 [dependencies]
 anchor-lang = { version = "0.28.0", features = ["init-if-needed"] }
 anchor-spl = { version = "0.28.0", features = ["metadata"] }
+
+# Pin dependencies to avoid edition2024
+solana-program = "=1.16.27"
+spl-token = "=3.5.0"
+spl-associated-token-account = "=1.1.3"
 
 [profile.release]
 overflow-checks = true

@@ -76,7 +76,6 @@ pub fn handler(ctx: Context<Sell>, token_amount: u64) -> Result<()> {
     let token_mint_key = ctx.accounts.token_mint.key();
     let token_state = &mut ctx.accounts.token_state;
 
-    require!(!token_state.paused, LeveragedMemeError::ContractPaused);
     require!(!token_state.graduated, LeveragedMemeError::AlreadyGraduated);
     require!(token_amount > 0, LeveragedMemeError::InvalidAmount);
 
