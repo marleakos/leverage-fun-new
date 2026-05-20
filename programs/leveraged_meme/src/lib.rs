@@ -59,11 +59,6 @@ pub mod leveraged_meme {
         instructions::graduate::handler(ctx, current_oracle_price)
     }
 
-    /// Emergency pause (authority only)
-    pub fn set_pause(ctx: Context<SetPause>, paused: bool) -> Result<()> {
-        instructions::set_pause::handler(ctx, paused)
-    }
-
     /// Claim accumulated fees (creator or protocol only)
     pub fn claim_fees(ctx: Context<ClaimFees>) -> Result<()> {
         instructions::claim_fees::handler(ctx)

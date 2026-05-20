@@ -181,7 +181,6 @@ pub fn handler(
     token_state.curve_state = curve_state;
     token_state.graduated = false;
     token_state.created_at = clock.unix_timestamp;
-    token_state.paused = false;
     token_state.total_fees_collected = 0;
     token_state.leverage = leverage;
     token_state.direction = direction;

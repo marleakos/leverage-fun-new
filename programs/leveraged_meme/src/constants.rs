@@ -4,7 +4,7 @@ pub const TOKEN_DECIMALS: u8 = 6;
 pub const TOTAL_SUPPLY: u64 = 1_000_000_000_000_000;
 pub const CURVE_RESERVE_AMOUNT: u64 = TOTAL_SUPPLY * 75 / 100;
 pub const LP_RESERVE_AMOUNT: u64 = TOTAL_SUPPLY * 25 / 100;
-pub const VIRTUAL_SOL_SEED: u64 = 4_000_000_000;
+pub const VIRTUAL_SOL_SEED: u64 = 50_000_000_000; // 50 SOL virtual liquidity for solid floor
 pub const GRADUATION_THRESHOLD: u64 = 69_000_000_000;
 pub const DEPLOY_FEE: u64 = 100_000_000;
 

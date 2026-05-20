@@ -17,9 +17,6 @@ pub enum LeveragedMemeError {
     #[msg("Graduation threshold not reached")]
     GraduationThresholdNotMet,
 
-    #[msg("Contract is paused")]
-    ContractPaused,
-
     #[msg("Unauthorized")]
     Unauthorized,
 
