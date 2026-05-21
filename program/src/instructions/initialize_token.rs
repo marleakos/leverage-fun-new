@@ -90,33 +90,22 @@ pub fn handler(
     referrer: Option<Pubkey>,
 ) -> Result<()> {
     msg!("Starting initialize_token handler");
+    
+    // Validate inputs
     require!(name.len() <= 32, LeveragedMemeError::NameTooLong);
     require!(symbol.len() <= 10, LeveragedMemeError::SymbolTooLong);
     require!(leverage >= 2 && leverage <= 10, LeveragedMemeError::InvalidLeverage);
     
-    // Extract ALL keys and account infos FIRST before any mutations
     let clock = &ctx.accounts.clock;
     let token_mint_key = ctx.accounts.token_mint.key();
     let creator_key = ctx.accounts.creator.key();
-    let token_state_key = ctx.accounts.token_state.key();
-    let _fee_vault_key = ctx.accounts.fee_vault.key();
-    
-    // Clone all account infos needed for CPI
-    let token_mint_info = ctx.accounts.token_mint.to_account_info();
-    let curve_token_account_info = ctx.accounts.curve_token_account.to_account_info();
-    let lp_token_account_info = ctx.accounts.lp_token_account.to_account_info();
-    let creator_info = ctx.accounts.creator.to_account_info();
-    let token_program_info = ctx.accounts.token_program.to_account_info();
-    let _token_state_info = ctx.accounts.token_state.to_account_info();
     
     msg!("Creator: {}", creator_key);
     msg!("Token mint: {}", token_mint_key);
     
-    // Handle referral
+    // Initialize user_referral first (before other operations)
     let user_referral = &mut ctx.accounts.user_referral;
-    if user_referral.user != creator_key {
-        user_referral.user = creator_key;
-    }
+    user_referral.user = creator_key;
     
     let final_referrer = if user_referral.referred_by.is_some() {
         user_referral.referred_by
@@ -139,9 +128,15 @@ pub fn handler(
             .checked_mul(CURVE_RESERVE_AMOUNT as u128)
             .ok_or(LeveragedMemeError::MathOverflow)?,
     };
-    msg!("Curve state created");
     
-    // First CPI: Mint to curve token account
+    // Clone account infos for CPI
+    let token_mint_info = ctx.accounts.token_mint.to_account_info();
+    let curve_token_account_info = ctx.accounts.curve_token_account.to_account_info();
+    let lp_token_account_info = ctx.accounts.lp_token_account.to_account_info();
+    let creator_info = ctx.accounts.creator.to_account_info();
+    let token_program_info = ctx.accounts.token_program.to_account_info();
+    
+    // First mint
     msg!("Minting curve tokens");
     let cpi_accounts = token::MintTo {
         mint: token_mint_info.clone(),
@@ -150,9 +145,8 @@ pub fn handler(
     };
     let cpi_ctx = CpiContext::new(token_program_info.clone(), cpi_accounts);
     token::mint_to(cpi_ctx, CURVE_RESERVE_AMOUNT)?;
-    msg!("Curve tokens minted");
     
-    // Second CPI: Mint to LP token account
+    // Second mint
     let cpi_accounts_lp = token::MintTo {
         mint: token_mint_info.clone(),
         to: lp_token_account_info,
@@ -161,7 +155,7 @@ pub fn handler(
     let cpi_ctx_lp = CpiContext::new(token_program_info.clone(), cpi_accounts_lp);
     token::mint_to(cpi_ctx_lp, LP_RESERVE_AMOUNT)?;
     
-    // Third CPI: Transfer mint authority
+    // Transfer authority
     msg!("Transferring mint authority");
     let cpi_set_authority = token::SetAuthority {
         current_authority: creator_info,
@@ -181,11 +175,10 @@ pub fn handler(
     token::set_authority(
         cpi_ctx_authority,
         token::spl_token::instruction::AuthorityType::MintTokens,
-        Some(token_state_key),
+        Some(ctx.accounts.token_state.key()),
     )?;
-    msg!("Mint authority transferred");
     
-    // Now do all the account mutations
+    // Initialize token_state
     let token_state = &mut ctx.accounts.token_state;
     token_state.creator = creator_key;
     token_state.token_mint = token_mint_key;
@@ -201,6 +194,7 @@ pub fn handler(
     token_state.underlying = underlying;
     token_state.oracle_price_at_launch = oracle_price_at_launch;
     
+    // Initialize fee_vault
     let fee_vault = &mut ctx.accounts.fee_vault;
     fee_vault.token_mint = token_mint_key;
     fee_vault.total_collected = 0;
@@ -223,8 +217,6 @@ pub fn handler(
     });
     
     msg!("Token initialized: {}", token_state.name);
-    msg!("Symbol: {}", token_state.symbol);
-    msg!("Leverage: {}x {:?} {:?}", leverage, direction, underlying);
     
     Ok(())
 }
