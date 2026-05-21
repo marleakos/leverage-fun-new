@@ -12,6 +12,7 @@ pub struct InitializeToken<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
     
+    // Token mint - initialized first
     #[account(
         init,
         payer = creator,
@@ -20,6 +21,7 @@ pub struct InitializeToken<'info> {
     )]
     pub token_mint: Account<'info, Mint>,
 
+    // Token state - uses token_mint key
     #[account(
         init,
         payer = creator,
@@ -32,6 +34,7 @@ pub struct InitializeToken<'info> {
     )]
     pub token_state: Account<'info, TokenState>,
 
+    // Fee vault - uses token_mint key  
     #[account(
         init,
         payer = creator,
@@ -44,6 +47,7 @@ pub struct InitializeToken<'info> {
     )]
     pub fee_vault: Account<'info, FeeVault>,
     
+    // User referral - uses creator key (not token_mint)
     #[account(
         init_if_needed,
         payer = creator,
@@ -56,6 +60,7 @@ pub struct InitializeToken<'info> {
     )]
     pub user_referral: Account<'info, UserReferral>,
     
+    // Curve token account - uses token_mint
     #[account(
         init,
         payer = creator,
@@ -64,6 +69,7 @@ pub struct InitializeToken<'info> {
     )]
     pub curve_token_account: Account<'info, TokenAccount>,
     
+    // LP token account - uses token_mint
     #[account(
         init,
         payer = creator,
@@ -97,13 +103,17 @@ pub fn handler(
     require!(leverage >= 2 && leverage <= 10, LeveragedMemeError::InvalidLeverage);
     
     let clock = &ctx.accounts.clock;
+    
+    // Get keys - these should be valid now
     let token_mint_key = ctx.accounts.token_mint.key();
     let creator_key = ctx.accounts.creator.key();
+    let token_state_key = ctx.accounts.token_state.key();
     
     msg!("Creator: {}", creator_key);
     msg!("Token mint: {}", token_mint_key);
+    msg!("Token state: {}", token_state_key);
     
-    // Initialize user_referral first (before other operations)
+    // Initialize user_referral
     let user_referral = &mut ctx.accounts.user_referral;
     user_referral.user = creator_key;
     
@@ -129,14 +139,14 @@ pub fn handler(
             .ok_or(LeveragedMemeError::MathOverflow)?,
     };
     
-    // Clone account infos for CPI
+    // Get account infos for CPI
     let token_mint_info = ctx.accounts.token_mint.to_account_info();
     let curve_token_account_info = ctx.accounts.curve_token_account.to_account_info();
     let lp_token_account_info = ctx.accounts.lp_token_account.to_account_info();
     let creator_info = ctx.accounts.creator.to_account_info();
     let token_program_info = ctx.accounts.token_program.to_account_info();
     
-    // First mint
+    // First mint to curve
     msg!("Minting curve tokens");
     let cpi_accounts = token::MintTo {
         mint: token_mint_info.clone(),
@@ -146,7 +156,8 @@ pub fn handler(
     let cpi_ctx = CpiContext::new(token_program_info.clone(), cpi_accounts);
     token::mint_to(cpi_ctx, CURVE_RESERVE_AMOUNT)?;
     
-    // Second mint
+    // Second mint to LP
+    msg!("Minting LP tokens");
     let cpi_accounts_lp = token::MintTo {
         mint: token_mint_info.clone(),
         to: lp_token_account_info,
@@ -155,7 +166,7 @@ pub fn handler(
     let cpi_ctx_lp = CpiContext::new(token_program_info.clone(), cpi_accounts_lp);
     token::mint_to(cpi_ctx_lp, LP_RESERVE_AMOUNT)?;
     
-    // Transfer authority
+    // Transfer mint authority to token_state PDA
     msg!("Transferring mint authority");
     let cpi_set_authority = token::SetAuthority {
         current_authority: creator_info,
@@ -175,10 +186,11 @@ pub fn handler(
     token::set_authority(
         cpi_ctx_authority,
         token::spl_token::instruction::AuthorityType::MintTokens,
-        Some(ctx.accounts.token_state.key()),
+        Some(token_state_key),
     )?;
     
     // Initialize token_state
+    msg!("Initializing token state");
     let token_state = &mut ctx.accounts.token_state;
     token_state.creator = creator_key;
     token_state.token_mint = token_mint_key;
@@ -186,7 +198,9 @@ pub fn handler(
     token_state.symbol = symbol.clone();
     token_state.uri = uri;
     token_state.curve_state = curve_state;
+    token_state.fee_vault = ctx.accounts.fee_vault.key();
     token_state.graduated = false;
+    token_state.amm_pool = None;
     token_state.created_at = clock.unix_timestamp;
     token_state.total_fees_collected = 0;
     token_state.leverage = leverage;
@@ -195,6 +209,7 @@ pub fn handler(
     token_state.oracle_price_at_launch = oracle_price_at_launch;
     
     // Initialize fee_vault
+    msg!("Initializing fee vault");
     let fee_vault = &mut ctx.accounts.fee_vault;
     fee_vault.token_mint = token_mint_key;
     fee_vault.total_collected = 0;
@@ -216,7 +231,7 @@ pub fn handler(
         timestamp: clock.unix_timestamp,
     });
     
-    msg!("Token initialized: {}", token_state.name);
+    msg!("Token initialized successfully: {}", name);
     
     Ok(())
 }
