@@ -99,7 +99,7 @@ pub fn handler(
     let token_mint_key = ctx.accounts.token_mint.key();
     let creator_key = ctx.accounts.creator.key();
     let token_state_key = ctx.accounts.token_state.key();
-    let fee_vault_key = ctx.accounts.fee_vault.key();
+    let _fee_vault_key = ctx.accounts.fee_vault.key();
     
     // Clone all account infos needed for CPI
     let token_mint_info = ctx.accounts.token_mint.to_account_info();
@@ -107,7 +107,7 @@ pub fn handler(
     let lp_token_account_info = ctx.accounts.lp_token_account.to_account_info();
     let creator_info = ctx.accounts.creator.to_account_info();
     let token_program_info = ctx.accounts.token_program.to_account_info();
-    let token_state_info = ctx.accounts.token_state.to_account_info();
+    let _token_state_info = ctx.accounts.token_state.to_account_info();
     
     msg!("Creator: {}", creator_key);
     msg!("Token mint: {}", token_mint_key);
