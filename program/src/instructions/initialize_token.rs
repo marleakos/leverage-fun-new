@@ -142,15 +142,21 @@ pub fn handler(
     
     msg!("Setting up CPI for curve token mint");
     
+    // Clone account infos before CPI to avoid borrow issues
+    let token_mint_info = ctx.accounts.token_mint.to_account_info();
+    let curve_token_account_info = ctx.accounts.curve_token_account.to_account_info();
+    let creator_info = ctx.accounts.creator.to_account_info();
+    let token_program_info = ctx.accounts.token_program.to_account_info();
+    
     // Mint using creator as authority (mint was initialized with creator as authority)
     let cpi_accounts = token::MintTo {
-        mint: ctx.accounts.token_mint.to_account_info(),
-        to: ctx.accounts.curve_token_account.to_account_info(),
-        authority: ctx.accounts.creator.to_account_info(),
+        mint: token_mint_info.clone(),
+        to: curve_token_account_info.clone(),
+        authority: creator_info.clone(),
     };
     
     let cpi_ctx = CpiContext::new(
-        ctx.accounts.token_program.to_account_info(),
+        token_program_info.clone(),
         cpi_accounts,
     );
     
@@ -158,14 +164,17 @@ pub fn handler(
     token::mint_to(cpi_ctx, CURVE_RESERVE_AMOUNT)?;
     msg!("Curve tokens minted");
     
+    // Clone for second mint
+    let lp_token_account_info = ctx.accounts.lp_token_account.to_account_info();
+    
     let cpi_accounts_lp = token::MintTo {
-        mint: ctx.accounts.token_mint.to_account_info(),
-        to: ctx.accounts.lp_token_account.to_account_info(),
-        authority: ctx.accounts.creator.to_account_info(),
+        mint: token_mint_info,
+        to: lp_token_account_info,
+        authority: creator_info,
     };
     
     let cpi_ctx_lp = CpiContext::new(
-        ctx.accounts.token_program.to_account_info(),
+        token_program_info,
         cpi_accounts_lp,
     );
     
