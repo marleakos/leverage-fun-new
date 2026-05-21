@@ -44,7 +44,6 @@ pub struct InitializeToken<'info> {
     )]
     pub fee_vault: Account<'info, FeeVault>,
     
-    // User referral account - tracks who referred the creator
     #[account(
         init_if_needed,
         payer = creator,
@@ -95,20 +94,26 @@ pub fn handler(
     require!(symbol.len() <= 10, LeveragedMemeError::SymbolTooLong);
     require!(leverage >= 2 && leverage <= 10, LeveragedMemeError::InvalidLeverage);
     
+    // Extract ALL keys and account infos FIRST before any mutations
     let clock = &ctx.accounts.clock;
-    
-    // Extract keys FIRST before any borrows
     let token_mint_key = ctx.accounts.token_mint.key();
     let creator_key = ctx.accounts.creator.key();
+    let token_state_key = ctx.accounts.token_state.key();
+    let fee_vault_key = ctx.accounts.fee_vault.key();
+    
+    // Clone all account infos needed for CPI
+    let token_mint_info = ctx.accounts.token_mint.to_account_info();
+    let curve_token_account_info = ctx.accounts.curve_token_account.to_account_info();
+    let lp_token_account_info = ctx.accounts.lp_token_account.to_account_info();
+    let creator_info = ctx.accounts.creator.to_account_info();
+    let token_program_info = ctx.accounts.token_program.to_account_info();
+    let token_state_info = ctx.accounts.token_state.to_account_info();
     
     msg!("Creator: {}", creator_key);
     msg!("Token mint: {}", token_mint_key);
     
-    // Handle referral - if user has existing referrer, use that
-    // Otherwise set the provided referrer (only once)
+    // Handle referral
     let user_referral = &mut ctx.accounts.user_referral;
-    
-    // Always ensure user field is set
     if user_referral.user != creator_key {
         user_referral.user = creator_key;
     }
@@ -116,7 +121,6 @@ pub fn handler(
     let final_referrer = if user_referral.referred_by.is_some() {
         user_referral.referred_by
     } else {
-        // Set the referrer if provided and not self
         let valid_referrer = referrer.filter(|r| *r != creator_key);
         user_referral.referred_by = valid_referrer;
         user_referral.total_referral_earnings = 0;
@@ -124,10 +128,7 @@ pub fn handler(
         valid_referrer
     };
     
-    // Store keys for later use
-    let token_mint_key_for_state = token_mint_key;
-    let creator_key_for_state = creator_key;
-    
+    // Setup curve state
     msg!("Setting up curve state");
     let curve_state = CurveState {
         virtual_sol_reserve: VIRTUAL_SOL_SEED,
@@ -140,76 +141,54 @@ pub fn handler(
     };
     msg!("Curve state created");
     
-    msg!("Setting up CPI for curve token mint");
-    
-    // Clone account infos before CPI to avoid borrow issues
-    let token_mint_info = ctx.accounts.token_mint.to_account_info();
-    let curve_token_account_info = ctx.accounts.curve_token_account.to_account_info();
-    let creator_info = ctx.accounts.creator.to_account_info();
-    let token_program_info = ctx.accounts.token_program.to_account_info();
-    
-    // Mint using creator as authority (mint was initialized with creator as authority)
+    // First CPI: Mint to curve token account
+    msg!("Minting curve tokens");
     let cpi_accounts = token::MintTo {
         mint: token_mint_info.clone(),
-        to: curve_token_account_info.clone(),
+        to: curve_token_account_info,
         authority: creator_info.clone(),
     };
-    
-    let cpi_ctx = CpiContext::new(
-        token_program_info.clone(),
-        cpi_accounts,
-    );
-    
-    msg!("Minting curve tokens");
+    let cpi_ctx = CpiContext::new(token_program_info.clone(), cpi_accounts);
     token::mint_to(cpi_ctx, CURVE_RESERVE_AMOUNT)?;
     msg!("Curve tokens minted");
     
-    // Clone for second mint
-    let lp_token_account_info = ctx.accounts.lp_token_account.to_account_info();
-    
+    // Second CPI: Mint to LP token account
     let cpi_accounts_lp = token::MintTo {
-        mint: token_mint_info,
+        mint: token_mint_info.clone(),
         to: lp_token_account_info,
-        authority: creator_info,
+        authority: creator_info.clone(),
     };
-    
-    let cpi_ctx_lp = CpiContext::new(
-        token_program_info,
-        cpi_accounts_lp,
-    );
-    
+    let cpi_ctx_lp = CpiContext::new(token_program_info.clone(), cpi_accounts_lp);
     token::mint_to(cpi_ctx_lp, LP_RESERVE_AMOUNT)?;
     
-    // Transfer mint authority to token_state PDA
-    msg!("Transferring mint authority to token_state");
+    // Third CPI: Transfer mint authority
+    msg!("Transferring mint authority");
     let cpi_set_authority = token::SetAuthority {
-        current_authority: ctx.accounts.creator.to_account_info(),
-        account_or_mint: ctx.accounts.token_mint.to_account_info(),
+        current_authority: creator_info,
+        account_or_mint: token_mint_info,
     };
-    
     let seeds = &[
         TOKEN_STATE_SEED,
-        token_mint_key_for_state.as_ref(),
+        token_mint_key.as_ref(),
         &[ctx.bumps.token_state],
     ];
     let signer = &[&seeds[..]];
-    
     let cpi_ctx_authority = CpiContext::new_with_signer(
-        ctx.accounts.token_program.to_account_info(),
+        token_program_info,
         cpi_set_authority,
         signer,
     );
-    
     token::set_authority(
         cpi_ctx_authority,
         token::spl_token::instruction::AuthorityType::MintTokens,
-        Some(ctx.accounts.token_state.key()),
+        Some(token_state_key),
     )?;
     msg!("Mint authority transferred");
     
+    // Now do all the account mutations
     let token_state = &mut ctx.accounts.token_state;
-    token_state.creator = creator_key_for_state;
-    token_state.token_mint = token_mint_key_for_state;
+    token_state.creator = creator_key;
+    token_state.token_mint = token_mint_key;
     token_state.name = name.clone();
     token_state.symbol = symbol.clone();
     token_state.uri = uri;
@@ -223,7 +202,7 @@ pub fn handler(
     token_state.oracle_price_at_launch = oracle_price_at_launch;
     
     let fee_vault = &mut ctx.accounts.fee_vault;
-    fee_vault.token_mint = token_mint_key_for_state;
+    fee_vault.token_mint = token_mint_key;
     fee_vault.total_collected = 0;
     fee_vault.creator_claimed = 0;
     fee_vault.protocol_claimed = 0;
@@ -232,10 +211,9 @@ pub fn handler(
     fee_vault.referral_rewards_total = 0;
     fee_vault.referral_rewards_claimed = 0;
     
-    // Emit initialization event
     emit!(TokenInitialized {
-        token_mint: token_mint_key_for_state,
-        creator: creator_key_for_state,
+        token_mint: token_mint_key,
+        creator: creator_key,
         name: name.clone(),
         symbol: symbol.clone(),
         leverage,
@@ -247,9 +225,6 @@ pub fn handler(
     msg!("Token initialized: {}", token_state.name);
     msg!("Symbol: {}", token_state.symbol);
     msg!("Leverage: {}x {:?} {:?}", leverage, direction, underlying);
-    if let Some(ref_addr) = final_referrer {
-        msg!("Referrer: {}", ref_addr);
-    }
     
     Ok(())
 }
